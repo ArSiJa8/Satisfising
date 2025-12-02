@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ArSiJa Studios — Audio Particle Visualizer</title>
+<style>
+:root{
+  --bg:#0b1020; --panel:#0f1724; --muted:#9aa4bf; --accent:#7bd389;
+  --glass: rgba(255,255,255,0.04);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial}
+body{background:linear-gradient(180deg,#041226 0%, #07121b 100%); color:#dfe7ff; overflow:hidden}
+canvas{display:block; width:100vw; height:100vh}
+.ui {
+  position:fixed; right:18px; top:18px; width:360px; max-width:calc(100vw - 40px); z-index:30;
+  backdrop-filter: blur(6px) saturate(120%);
+}
+.panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:14px; padding:12px; box-shadow: 0 6px 24px rgba(2,6,23,0.6); color:var(--muted); margin-bottom:12px}
+.header{display:flex;align-items:center;gap:10px}
+.brand{font-weight:700;color:#e8f1ff;font-size:16px}
+.controls{margin-top:10px; display:grid; gap:8px}
+.row{display:flex;gap:8px;align-items:center}
+.btn{background:var(--glass); border:1px solid rgba(255,255,255,0.04); color:#e8f1ff; padding:8px 10px; border-radius:10px; cursor:pointer; font-weight:600; font-size:13px}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+.btn.warn{background:linear-gradient(90deg,#ff6b6b,#ff8e6b); color:#08111a}
+.slider{width:100%}
+.small{font-size:12px; color:var(--muted)}
+.section-title{font-weight:700;color:#e9f6ff;margin-bottom:6px}
+.collapsible{overflow:hidden; transition:height .28s ease}
+.preset-gallery{display:flex;gap:8px;flex-wrap:wrap}
+.preset-card{width:72px;height:52px;border-radius:8px; overflow:hidden; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.03); display:flex; align-items:center; justify-content:center}
+.preset-card p{font-size:11px;margin:0;color:var(--muted)}
+.colors{display:flex;gap:6px;flex-wrap:wrap}
+.color-swatch{width:36px;height:28px;border-radius:6px;border:1px solid rgba(255,255,255,0.06); cursor:pointer}
+.toggle{display:inline-flex; align-items:center; gap:8px}
+.footer{position:fixed; right:12px; bottom:12px; color:rgba(255,255,255,0.5); font-size:12px;}
+.logo-small{width:18px;height:18px;border-radius:4px;background:linear-gradient(90deg,var(--accent),#6bb3ff)}
+.note{font-size:12px;color:var(--muted)}
+.left-controls{position:fixed; left:18px; top:18px; z-index:30}
+.icon{width:14px;height:14px;display:inline-block}
+.hint{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<canvas id="main"></canvas>
+<div class="ui">
+  <div class="panel header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="logo-small"></div>
+      <div>
+        <div class="brand">ArSiJa Studios — Visualizer</div>
+        <div class="small">Interactive audio particle flow</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="presetPanel">
+    <div class="section-title">Presets</div>
+    <div class="preset-gallery" id="presets"></div>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="btn" id="newSeed">New Seed</button>
+      <button class="btn ghost" id="applySeed">Apply Seed</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Audio Source</div>
+    <div class="controls">
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="enableMic">Enable Mic</button>
+        <label class="btn ghost" style="padding:6px 10px">
+          Upload Audio
+          <input id="fileInput" type="file" accept="audio/*" style="display:none" />
+        </label>
+      </div>
+      <div class="row">
+        <audio id="audioPlayer" controls style="width:100%;display:none"></audio>
+      </div>
+      <div class="row small"><div class="hint">When audio is present, Export becomes available and the recorded video will include audio.</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Color Palette</div>
+    <div class="small">Choose 1–6 colors. Particles blend between them.</div>
+    <div class="controls">
+      <div class="colors" id="colorList"></div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input type="color" id="colorPicker" class="btn" value="#7bd389" style="padding:6px" />
+        <button class="btn" id="addColor">Add Color</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Advanced (collapsible)</div>
+    <div id="advancedCollapsible" class="collapsible" style="height:auto">
+      <div class="controls">
+        <label class="small">Particle Count <span id="pcVal" class="hint">600</span></label>
+        <input type="range" min="100" max="3000" value="600" id="particleCount" class="slider">
+
+        <label class="small">Flow Scale <span id="fsVal" class="hint">0.0040</span></label>
+        <input type="range" min="0.001" max="0.02" step="0.0005" value="0.004" id="flowScale" class="slider">
+
+        <label class="small">Particle Size <span id="psVal" class="hint">2.0</span></label>
+        <input type="range" min="0.5" max="5" step="0.1" value="2" id="particleSize" class="slider">
+
+        <label class="small">Trail Decay <span id="tdVal" class="hint">0.18</span></label>
+        <input type="range" min="0.02" max="0.6" step="0.01" value="0.18" id="trailDecay" class="slider">
+
+        <label class="small">Color Shift Speed <span id="csVal" class="hint">0.6</span></label>
+        <input type="range" min="0" max="3" step="0.05" value="0.6" id="colorShift" class="slider">
+
+        <label class="small">Audio Gain <span id="agVal" class="hint">1.0</span></label>
+        <input type="range" min="0" max="6" step="0.05" value="1" id="audioGain" class="slider">
+
+        <label class="small">Bass Sensitivity <span id="bbVal" class="hint">1.0</span></label>
+        <input type="range" min="0" max="8" step="0.05" value="1" id="bassBoost" class="slider">
+
+        <label class="small">Recording Scale <span id="recScaleVal" class="hint">2x</span></label>
+        <input type="range" min="1" max="4" step="1" value="2" id="recordScale" class="slider">
+
+        <label class="small">FPS (recording)</label>
+        <input type="number" id="recordFps" min="15" max="60" value="30" style="width:80px"/>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Controls</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" id="pauseBtn">Pause</button>
+      <button class="btn ghost" id="clearBtn">Clear</button>
+      <button class="btn" id="savePng">Save PNG</button>
+      <button class="btn" id="copyUrl">Copy URL</button>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button class="btn warn" id="startRec">Start Recording</button>
+      <button class="btn ghost" id="stopRec" disabled>Stop Recording</button>
+      <button class="btn" id="exportBtn" disabled>Export Visualizer</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-title">Shortcuts & Help</div>
+    <div class="small">Click/drag on canvas to add attractor orbs. Double-click to clear orbs. Press <b>P</b> to pause/resume. Upload audio to enable export with sound.</div>
+  </div>
+
+</div>
+
+<div class="footer">ArSiJa Studios</div>
+
+<script>
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function seededRng(seed){ let s = seed >>> 0; return ()=>{ s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; } }
+function lerp(a,b,t){return a+(b-a)*t}
+
+const canvas = document.getElementById('main');
+const ctx = canvas ? canvas.getContext('2d', { alpha: false }) : null;
+let W = window.innerWidth, H = window.innerHeight; if(canvas){ canvas.width = W; canvas.height = H; }
+
+const fileInput = document.getElementById('fileInput');
+const audioPlayer = document.getElementById('audioPlayer');
+const enableMicBtn = document.getElementById('enableMic');
+const exportBtn = document.getElementById('exportBtn');
+const startRecBtn = document.getElementById('startRec');
+const stopRecBtn = document.getElementById('stopRec');
+const pauseBtn = document.getElementById('pauseBtn');
+const clearBtn = document.getElementById('clearBtn');
+const savePng = document.getElementById('savePng');
+const copyUrl = document.getElementById('copyUrl');
+const presetsEl = document.getElementById('presets');
+const newSeedBtn = document.getElementById('newSeed');
+const applySeedBtn = document.getElementById('applySeed');
+const colorList = document.getElementById('colorList');
+const colorPicker = document.getElementById('colorPicker');
+const addColorBtn = document.getElementById('addColor');
+
+const particleCountEl = document.getElementById('particleCount');
+const flowScaleEl = document.getElementById('flowScale');
+const particleSizeEl = document.getElementById('particleSize');
+const trailDecayEl = document.getElementById('trailDecay');
+const colorShiftEl = document.getElementById('colorShift');
+const audioGainEl = document.getElementById('audioGain');
+const bassBoostEl = document.getElementById('bassBoost');
+const recordScaleEl = document.getElementById('recordScale');
+const recordFpsEl = document.getElementById('recordFps');
+
+const pcVal = document.getElementById('pcVal');
+const fsVal = document.getElementById('fsVal');
+const psVal = document.getElementById('psVal');
+const tdVal = document.getElementById('tdVal');
+const csVal = document.getElementById('csVal');
+const agVal = document.getElementById('agVal');
+const bbVal = document.getElementById('bbVal');
+const recScaleVal = document.getElementById('recScaleVal');
+
+const playerControls = document.createElement('div'); playerControls.style.display='flex'; playerControls.style.gap='8px'; playerControls.style.alignItems='center';
+const seekSlider = document.createElement('input'); seekSlider.type='range'; seekSlider.min=0; seekSlider.max=100; seekSlider.value=0; seekSlider.style.width='100%';
+const timeLabel = document.createElement('div'); timeLabel.className='small'; timeLabel.textContent='00:00 / 00:00';
+const loopToggle = document.createElement('label'); loopToggle.className='toggle'; loopToggle.innerHTML = '<input type="checkbox" id="loopChk"/> Loop';
+
+const audioPanel = audioPlayer && audioPlayer.parentElement ? audioPlayer.parentElement : null;
+if(audioPanel){ audioPanel.insertBefore(playerControls, audioPlayer.nextSibling); playerControls.appendChild(seekSlider); playerControls.appendChild(timeLabel); playerControls.appendChild(loopToggle); }
+
+const uiEl = document.querySelector('.ui'); if(uiEl){ uiEl.style.maxHeight = 'calc(100vh - 36px)'; uiEl.style.overflow = 'auto'; uiEl.style.paddingRight = '6px'; }
+
+let seed = Math.floor(Math.random()*1e9);
+let particles = [];
+let attractors = [];
+let colors = ['#7bd389','#6bb3ff','#ff7bd3'];
+let paused = false;
+let audioContext = null;
+let analyser=null, sourceNode=null, audioGainNode=null;
+let audioStreamForRecording = null;
+let audioEnabled=false;
+let mediaRecorder=null, recordedBlobs=[];
+let currentFile=null;
+let lastTime = performance.now();
+let time=0;
+
+let params = {
+  particleCount: particleCountEl ? +particleCountEl.value : 600,
+  flowScale: flowScaleEl ? +flowScaleEl.value : 0.004,
+  particleSize: particleSizeEl ? +particleSizeEl.value : 2,
+  trailDecay: trailDecayEl ? +trailDecayEl.value : 0.18,
+  colorShift: colorShiftEl ? +colorShiftEl.value : 0.6,
+  audioGain: audioGainEl ? +audioGainEl.value : 1,
+  bassBoost: bassBoostEl ? +bassBoostEl.value : 1,
+  recordScale: recordScaleEl ? +recordScaleEl.value : 2,
+  recordFps: recordFpsEl ? +recordFpsEl.value : 30
+}
+
+class Particle{
+  constructor(x,y){ this.x=x; this.y=y; this.vx=0; this.vy=0; this.hue= Math.random(); this.size = params.particleSize*(0.6+Math.random()*1.2); this.life=0; }
+  update(dt){ const s=params.flowScale; const nx=this.x*s + seed*1e-7; const ny=this.y*s + seed*1e-7; const ang = (Math.sin(nx*2.1 + Math.cos(ny*1.7 + seed*0.00001)) + Math.cos(ny*1.9 - Math.sin(nx*1.3)) ) * Math.PI;
+    let audioFactor=1;
+    if(analyser){ const data=new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(data); let low=0; const lim=Math.floor(data.length*0.12)||1; for(let i=0;i<lim;i++) low+=data[i]; low/=lim; audioFactor += (low/256) * params.bassBoost * 2.0; }
+    let ax=0, ay=0; for(const a of attractors){ if(a && typeof a.x === 'number' && typeof a.y === 'number'){ const dx=a.x-this.x, dy=a.y-this.y, d2=dx*dx+dy*dy+1, f=(a.strength||0.7)/d2; ax+=dx*f; ay+=dy*f; } }
+    const speed = 0.6 * audioFactor; this.vx = lerp(this.vx, Math.cos(ang) * speed + ax, 0.14); this.vy = lerp(this.vy, Math.sin(ang) * speed + ay, 0.14);
+    this.x += this.vx * dt; this.y += this.vy * dt; this.life+=dt;
+    if(this.x < -50) this.x = W+50; if(this.x > W+50) this.x = -50; if(this.y < -50) this.y = H+50; if(this.y > H+50) this.y = -50; }
+}
+
+function resetParticles(){ particles=[]; for(let i=0;i<params.particleCount;i++) particles.push(new Particle(Math.random()*W, Math.random()*H)); }
+
+function onResize(){ W=window.innerWidth; H=window.innerHeight; if(canvas){ canvas.width=W; canvas.height=H; } }
+window.addEventListener('resize', onResize);
+
+if(canvas){
+  canvas.addEventListener('pointerdown', e=>{ const p={x:e.clientX, y:e.clientY, strength:1.2}; attractors.push(p); try{ if(e.pointerId) canvas.setPointerCapture(e.pointerId); }catch(_e){}; function move(ev){ const idx = attractors.length-1; if(idx>=0) { attractors[idx].x = ev.clientX; attractors[idx].y = ev.clientY; } } function up(){ canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', up); } canvas.addEventListener('pointermove', move); canvas.addEventListener('pointerup', up); });
+  canvas.addEventListener('dblclick', ()=>{ attractors=[]; });
+}
+
+async function initAudioFromElement(el){ if(!el) return; try{ if(!audioContext) audioContext = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ console.warn('AudioContext not available', e); }
+  try{ if(sourceNode) try{ sourceNode.disconnect(); }catch(e){}
+    if(audioContext && typeof audioContext.createMediaElementSource === 'function'){
+      sourceNode = audioContext.createMediaElementSource(el);
+      analyser = audioContext.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.8;
+      audioGainNode = audioContext.createGain(); audioGainNode.gain.value = params.audioGain;
+      sourceNode.connect(audioGainNode); audioGainNode.connect(analyser); analyser.connect(audioContext.destination);
+    }
+  }catch(e){ console.warn('initAudioFromElement failed', e); }
+  try{ if(typeof el.captureStream === 'function'){ audioStreamForRecording = el.captureStream(); } }catch(e){}
+  audioEnabled=true; if(exportBtn) exportBtn.disabled=false; }
+
+async function useUploadedFile(file){ if(!file) return; currentFile=file; const url=URL.createObjectURL(file); if(audioPlayer){ audioPlayer.src=url; audioPlayer.style.display='block'; audioPlayer.controls=true; try{ await audioPlayer.play(); }catch(e){} await initAudioFromElement(audioPlayer); } }
+
+if(fileInput) fileInput.addEventListener('change', e=>{ const f=e.target.files && e.target.files[0]; if(!f) return; useUploadedFile(f); });
+
+if(enableMicBtn) enableMicBtn.addEventListener('click', async ()=>{ try{ const ms = await navigator.mediaDevices.getUserMedia({ audio:true }); try{ if(!audioContext) audioContext = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+  if(sourceNode) try{ sourceNode.disconnect(); }catch(e){}
+  if(audioContext && typeof audioContext.createMediaStreamSource === 'function'){
+    sourceNode = audioContext.createMediaStreamSource(ms); analyser = audioContext.createAnalyser(); analyser.fftSize=2048; analyser.smoothingTimeConstant=0.85; audioGainNode = audioContext.createGain(); audioGainNode.gain.value = params.audioGain; sourceNode.connect(audioGainNode); audioGainNode.connect(analyser); audioStreamForRecording = ms; audioEnabled=true; if(exportBtn) exportBtn.disabled=false;
+  }
+  }catch(err){ alert('Microphone access denied or unavailable.'); console.error(err); }});
+
+const PRESETS = [
+  {name:'Galaxy', seedInc:1111, colors:['#7bd389','#6bb3ff','#ffd076'], particleCount:900, flowScale:0.0032, particleSize:2.4, trailDecay:0.14, colorShift:0.2},
+  {name:'Jellyfish', seedInc:2222, colors:['#6bb3ff','#a07bff','#7bd3ff'], particleCount:700, flowScale:0.005, particleSize:2.2, trailDecay:0.22, colorShift:0.9},
+  {name:'Fireworks', seedInc:3333, colors:['#ff7bd3','#ffd076','#ff6b6b','#fff9c4'], particleCount:800, flowScale:0.004, particleSize:2.8, trailDecay:0.12, colorShift:1.8},
+  {name:'Aurora', seedInc:4444, colors:['#7bd389','#6bb3ff','#3fffbf'], particleCount:1000, flowScale:0.0028, particleSize:1.8, trailDecay:0.2, colorShift:0.5}
+];
+
+function renderPresetThumbnails(){ if(!presetsEl) return; presetsEl.innerHTML=''; PRESETS.forEach((p,i)=>{ const card=document.createElement('div'); card.className='preset-card'; card.title=p.name; card.onclick=()=>applyPreset(i);
+  const mini=document.createElement('canvas'); mini.width=140; mini.height=100; mini.style.width='100%'; mini.style.height='100%'; card.appendChild(mini); presetsEl.appendChild(card);
+  const rng = seededRng((seed || 0) + (p.seedInc||0));
+  const mctx = mini.getContext('2d'); mctx.fillStyle='#061322'; mctx.fillRect(0,0,mini.width,mini.height); for(let k=0;k<80;k++){ const x = Math.floor(rng()*mini.width), y=Math.floor(rng()*mini.height); const c = p.colors[Math.floor(rng()*p.colors.length)]; mctx.globalAlpha = 0.8; mctx.fillStyle = c; mctx.beginPath(); mctx.arc(x,y, rng()*4+0.5, 0, Math.PI*2); mctx.fill(); } }); }
+renderPresetThumbnails();
+
+function applyPreset(i){ const p = PRESETS[i]; if(!p) return; seed = seed + (p.seedInc||0); colors = Array.isArray(p.colors) ? p.colors.slice() : colors; params.particleCount = p.particleCount || params.particleCount; if(particleCountEl) particleCountEl.value=p.particleCount; params.flowScale = p.flowScale || params.flowScale; if(flowScaleEl) flowScaleEl.value=p.flowScale; params.particleSize = p.particleSize || params.particleSize; if(particleSizeEl) particleSizeEl.value=p.particleSize; params.trailDecay=p.trailDecay || params.trailDecay; if(trailDecayEl) trailDecayEl.value=p.trailDecay; params.colorShift=p.colorShift || params.colorShift; if(colorShiftEl) colorShiftEl.value=p.colorShift; updateValues(); resetParticles(); renderColorList(); }
+if(newSeedBtn) newSeedBtn.addEventListener('click', ()=>{ seed = Math.floor(Math.random()*1e9); resetParticles(); renderPresetThumbnails(); });
+if(applySeedBtn) applySeedBtn.addEventListener('click', ()=>{ resetParticles(); });
+
+function renderColorList(){ if(!colorList) return; colorList.innerHTML=''; colors.forEach((c,idx)=>{ const sw=document.createElement('div'); sw.className='color-swatch'; sw.style.background=c||'#ffffff'; sw.title='Click to remove: '+(c||''); sw.onclick=()=>{ colors.splice(idx,1); renderColorList(); }; colorList.appendChild(sw); }); }
+renderColorList(); if(addColorBtn) addColorBtn.addEventListener('click', ()=>{ if(colors.length>=8) return alert('Max 8 colors'); colors.push(colorPicker ? colorPicker.value : '#ffffff'); renderColorList(); });
+
+function updateValues(){ params.particleCount = particleCountEl ? +particleCountEl.value : params.particleCount; params.flowScale = flowScaleEl ? +flowScaleEl.value : params.flowScale; params.particleSize = particleSizeEl ? +particleSizeEl.value : params.particleSize; params.trailDecay = trailDecayEl ? +trailDecayEl.value : params.trailDecay; params.colorShift = colorShiftEl ? +colorShiftEl.value : params.colorShift; params.audioGain = audioGainEl ? +audioGainEl.value : params.audioGain; params.bassBoost = bassBoostEl ? +bassBoostEl.value : params.bassBoost; params.recordScale = recordScaleEl ? +recordScaleEl.value : params.recordScale; params.recordFps = recordFpsEl ? +recordFpsEl.value : params.recordFps; if(pcVal) pcVal.textContent = params.particleCount; if(fsVal) fsVal.textContent = params.flowScale.toFixed(4); if(psVal) psVal.textContent = params.particleSize.toFixed(1); if(tdVal) tdVal.textContent = params.trailDecay.toFixed(2); if(csVal) csVal.textContent = params.colorShift; if(agVal) agVal.textContent = params.audioGain; if(bbVal) bbVal.textContent = params.bassBoost; if(recScaleVal) recScaleVal.textContent = params.recordScale + 'x'; }
+[particleCountEl,flowScaleEl,particleSizeEl,trailDecayEl,colorShiftEl,audioGainEl,bassBoostEl,recordScaleEl,recordFpsEl].forEach(inp=>{ if(inp) inp.addEventListener('input', ()=>{ updateValues(); if(inp===particleCountEl) resetParticles(); if(audioGainNode) audioGainNode.gain.value = params.audioGain; }); });
+updateValues();
+
+function drawBackground(){ if(!ctx) return; ctx.fillStyle='rgba(4,8,18,1)'; ctx.fillRect(0,0,W,H); }
+function sampleColors(t){ if(!Array.isArray(colors) || colors.length===0) return 'rgba(255,255,255,0.9)'; const n=colors.length; const pos = (t*(n-1)); const i=Math.floor(pos); const f=Math.max(0, Math.min(1, pos-i)); const c1 = colors[i] || colors[0]; const c2 = colors[Math.min(i+1,n-1)] || colors[n-1]; const rgb1 = hexToRgbSafe(c1); const rgb2 = hexToRgbSafe(c2); const r=Math.round(lerp(rgb1.r,rgb2.r,f)); const g=Math.round(lerp(rgb1.g,rgb2.g,f)); const b=Math.round(lerp(rgb1.b,rgb2.b,f)); return `rgba(${r},${g},${b},0.9)`; }
+function hexToRgbSafe(hex){ if(!hex || typeof hex !== 'string') return {r:255,g:255,b:255}; hex = hex.trim(); if(hex[0]==='#') hex = hex.slice(1); if(hex.length===3) hex = hex.split('').map(h=>h+h).join(''); const num = parseInt(hex,16); if(isNaN(num)) return {r:255,g:255,b:255}; return {r:(num>>16)&255, g:(num>>8)&255, b:num&255}; }
+
+function render(dt){ if(!ctx) return; ctx.fillStyle = `rgba(2,6,18,${params.trailDecay})`; ctx.fillRect(0,0,W,H); for(const p of particles){ p.update(dt); const t=(time*params.colorShift + p.hue)%1; const col = sampleColors(t); ctx.fillStyle = col; ctx.globalCompositeOperation='lighter'; ctx.beginPath(); ctx.arc(p.x,p.y, p.size, 0, Math.PI*2); ctx.fill(); ctx.globalCompositeOperation='source-over'; }
+  for(const a of attractors){ if(!a) continue; ctx.beginPath(); ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=2; ctx.arc(a.x||0,a.y||0,12,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
+}
+
+function loop(now){ const dt = Math.min(0.05, (now - lastTime)/1000); lastTime = now; if(!paused) time += dt; if(particles.length < params.particleCount) resetParticles(); drawBackground(); if(!paused) render(dt); requestAnimationFrame(loop); }
+resetParticles(); requestAnimationFrame(loop);
+
+if(pauseBtn) pauseBtn.addEventListener('click', ()=>{ paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
+window.addEventListener('keydown', e=>{ if(e && e.key && typeof e.key.toLowerCase === 'function' && e.key.toLowerCase()==='p'){ paused = !paused; if(pauseBtn) pauseBtn.textContent = paused ? 'Resume' : 'Pause'; } });
+if(clearBtn) clearBtn.addEventListener('click', ()=>{ particles=[]; attractors=[]; resetParticles(); });
+if(savePng) savePng.addEventListener('click', ()=>{ if(!canvas) return; canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='visualizer.png'; a.click(); }, 'image/png'); });
+
+function exportSettings(){ try{ const s={seed, colors, params, attractors}; return btoa(unescape(encodeURIComponent(JSON.stringify(s)))); }catch(e){ return ''; } }
+function importSettings(str){ if(!str) return; try{ const s = JSON.parse(decodeURIComponent(escape(atob(str)))); if(s.seed) seed=s.seed; if(Array.isArray(s.colors)) colors=s.colors; if(s.params){ params = {...params, ...s.params}; if(particleCountEl) particleCountEl.value = params.particleCount; if(flowScaleEl) flowScaleEl.value = params.flowScale; if(particleSizeEl) particleSizeEl.value = params.particleSize; if(trailDecayEl) trailDecayEl.value = params.trailDecay; if(colorShiftEl) colorShiftEl.value = params.colorShift; if(audioGainEl) audioGainEl.value = params.audioGain; if(bassBoostEl) bassBoostEl.value = params.bassBoost; if(recordScaleEl) recordScaleEl.value = params.recordScale; if(recordFpsEl) recordFpsEl.value = params.recordFps; updateValues(); resetParticles(); } if(Array.isArray(s.attractors)) attractors = s.attractors; renderColorList(); }catch(e){ console.warn('Invalid settings'); } }
+if(copyUrl) copyUrl.addEventListener('click', ()=>{ const token=exportSettings(); if(!token) return alert('Failed to export settings'); const url = location.origin + location.pathname + '#settings=' + token; try{ navigator.clipboard.writeText(url).then(()=>alert('Settings copied to clipboard')); }catch(e){ alert('Could not copy URL'); } });
+window.addEventListener('load', ()=>{ const h=location.hash; if(h && h.includes('settings=')){ const token=h.split('settings=')[1]; importSettings(token); } });
+
+async function startRecording(){ const scale = params.recordScale || 2; const fps = Math.max(15, Math.min(60, +recordFpsEl.value || params.recordFps || 30)); const captureWidth = W * scale; const captureHeight = H * scale; const off = document.createElement('canvas'); off.width = captureWidth; off.height = captureHeight; const offCtx = off.getContext('2d'); const stream = off.captureStream ? off.captureStream(fps) : null;
+  let mixedStream = stream; if(audioStreamForRecording && stream){ try{ const combined = new MediaStream(); stream.getVideoTracks().forEach(t=>combined.addTrack(t)); audioStreamForRecording.getAudioTracks().forEach(t=>combined.addTrack(t)); mixedStream = combined; }catch(e){ console.warn('attach audio failed', e); } }
+  let mime=''; const candidates=['video/mp4','video/mp4;codecs=avc1','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']; for(const c of candidates){ try{ if(typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)){ mime=c; break; } }catch(e){} } if(!mime) mime='video/webm'; recordedBlobs=[]; try{ mediaRecorder = stream ? new MediaRecorder(mixedStream, {mimeType:mime}) : null; }catch(e){ try{ mediaRecorder = stream ? new MediaRecorder(mixedStream) : null; }catch(e){ mediaRecorder = null; console.warn('MediaRecorder not available', e); } }
+  if(!mediaRecorder){ alert('Recording is not supported in this browser.'); return ()=>{}; }
+  mediaRecorder.ondataavailable = e=>{ if(e.data && e.data.size) recordedBlobs.push(e.data); };
+  mediaRecorder.onstop = ()=>{ const blob = new Blob(recordedBlobs, {type: recordedBlobs[0]?.type || 'video/webm'}); const ext = blob.type && blob.type.includes('mp4') ? 'mp4' : 'webm'; const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`visualizer_${Date.now()}.${ext}`; a.click(); if(ext!=='mp4'){ showFfmpegOption(blob); } };
+  mediaRecorder.start(); if(startRecBtn) startRecBtn.disabled=true; if(stopRecBtn) stopRecBtn.disabled=false; let runningRec=true; const recInterval = 1000 / fps; let last = performance.now(); function recLoop(now){ if(!runningRec) return; const dt = now - last; if(dt >= recInterval - 2){ if(offCtx){ offCtx.fillStyle='rgba(2,6,18,1)'; offCtx.fillRect(0,0,captureWidth,captureHeight); offCtx.save(); offCtx.scale(scale,scale); offCtx.globalCompositeOperation='lighter'; for(const p of particles){ const col = sampleColors((time*params.colorShift + p.hue)%1); offCtx.fillStyle = col; offCtx.beginPath(); offCtx.arc(p.x,p.y, Math.max(1,p.size), 0, Math.PI*2); offCtx.fill(); } offCtx.restore(); offCtx.save(); offCtx.globalCompositeOperation='source-over'; for(const a of attractors){ offCtx.beginPath(); offCtx.strokeStyle='rgba(255,255,255,0.06)'; offCtx.lineWidth=2*scale; offCtx.arc((a.x||0)*scale,(a.y||0)*scale,12*scale,0,Math.PI*2); offCtx.fillStyle='rgba(255,255,255,0.02)'; offCtx.fill(); offCtx.stroke(); } offCtx.restore(); }
+      last=now; }
+    requestAnimationFrame(recLoop); }
+  requestAnimationFrame(recLoop);
+  return ()=>{ runningRec=false; try{ if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); }catch(e){} if(startRecBtn) startRecBtn.disabled=false; if(stopRecBtn) stopRecBtn.disabled=true; };
+}
+
+let stopRecordingHandle = null;
+if(startRecBtn) startRecBtn.addEventListener('click', async ()=>{ if(!audioEnabled && !audioStreamForRecording && !(audioPlayer && audioPlayer.src)){ if(!confirm('No audio source attached. Proceed with silent recording?')) return; } stopRecordingHandle = await startRecording(); });
+if(stopRecBtn) stopRecBtn.addEventListener('click', ()=>{ if(stopRecordingHandle) stopRecordingHandle(); });
+
+function showFfmpegOption(blob){ if(!blob) return; const box = document.createElement('div'); box.className='panel'; box.style.position='fixed'; box.style.left='50%'; box.style.top='50%'; box.style.transform='translate(-50%,-50%)'; box.style.zIndex=9999; box.style.width='420px'; box.style.padding='12px'; box.innerHTML = `<div style="font-weight:700;color:#e8f1ff;margin-bottom:8px">Transcode to MP4 (optional)</div><div class="small">Your browser produced ${blob.type}. If you need MP4 you can transcode here using ffmpeg.wasm. This will download a large library and may take time.</div>`;
+  const btnWrap=document.createElement('div'); btnWrap.style.display='flex'; btnWrap.style.gap='8px'; btnWrap.style.marginTop='10px'; const tbtn=document.createElement('button'); tbtn.className='btn'; tbtn.textContent='Transcode to MP4'; const close=document.createElement('button'); close.className='btn ghost'; close.textContent='Close'; btnWrap.appendChild(tbtn); btnWrap.appendChild(close); box.appendChild(btnWrap); document.body.appendChild(box);
+  close.onclick=()=>{ try{ document.body.removeChild(box); }catch(e){} };
+  tbtn.onclick=async ()=>{
+    tbtn.disabled=true; tbtn.textContent='Loading ffmpeg...';
+    try{
+      if(!window.FFmpeg){ await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://unpkg.com/@ffmpeg/ffmpeg@0.11.8/dist/ffmpeg.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+      const { createFFmpeg, fetchFile } = window.FFmpeg || {};
+      if(!createFFmpeg) throw new Error('ffmpeg not available');
+      const ffmpeg = createFFmpeg({ log:true }); await ffmpeg.load(); tbtn.textContent='Transcoding...'; const inName='in.webm'; const outName='out.mp4'; ffmpeg.FS('writeFile', inName, await fetchFile(blob)); await ffmpeg.run('-i', inName, '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p', outName); const data = ffmpeg.FS('readFile', outName); const mp4Blob = new Blob([data.buffer], {type:'video/mp4'}); const a=document.createElement('a'); a.href=URL.createObjectURL(mp4Blob); a.download='visualizer_transcoded.mp4'; a.click(); tbtn.textContent='Done';
+    }catch(err){ alert('ffmpeg transcoding failed. See console.'); console.error(err); tbtn.disabled=false; tbtn.textContent='Transcode to MP4'; }
+  };
+}
+
+if(exportBtn) exportBtn.addEventListener('click', async ()=>{ if(!currentFile && !audioStreamForRecording){ alert('Upload an audio file or enable mic before export.'); return; } if(currentFile && audioPlayer){ audioPlayer.currentTime=0; audioPlayer.play().catch(()=>{}); } if(startRecBtn && startRecBtn.disabled){ alert('Recording already in progress'); return; } stopRecordingHandle = await startRecording(); if(audioPlayer && !audioPlayer.paused && !audioPlayer.ended){ audioPlayer.onended = ()=>{ if(stopRecordingHandle) stopRecordingHandle(); audioPlayer.onended=null; } } });
+
+if(audioPlayer) audioPlayer.style.display = audioPlayer.src ? 'block' : 'none';
+
+function formatTime(s){ if(!isFinite(s)) return '00:00'; const m=Math.floor(s/60); const sec=Math.floor(s%60); return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`; }
+
+if(audioPlayer) audioPlayer.addEventListener('timeupdate', ()=>{ if(!audioPlayer || !isFinite(audioPlayer.duration)) return; const pct = (audioPlayer.currentTime / audioPlayer.duration) * 100; if(seekSlider) seekSlider.value = pct; if(timeLabel) timeLabel.textContent = `${formatTime(audioPlayer.currentTime)} / ${formatTime(audioPlayer.duration)}`; });
+if(seekSlider) seekSlider.addEventListener('input', ()=>{ if(!audioPlayer || !audioPlayer.duration) return; const t = (seekSlider.value/100) * audioPlayer.duration; audioPlayer.currentTime = t; });
+const loopChk = document.getElementById('loopChk'); if(loopChk && audioPlayer) loopChk.addEventListener('change', ()=>{ audioPlayer.loop = loopChk.checked; });
+
+window.addEventListener('unload', ()=>{ if(audioPlayer && !audioPlayer.paused) audioPlayer.pause(); });
+
+renderPresetThumbnails();
+</script>
+</body>
+</html>
